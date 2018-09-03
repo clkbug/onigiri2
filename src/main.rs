@@ -3,7 +3,7 @@ struct ArchitectureState {
     regs: [u32; 32],
 }
 
-struct DecodedInstruction {
+struct OpInfo {
     operation: Operation,
     dstRegs: Vec<i32>,
     srcRegs: Vec<i32>,
@@ -62,9 +62,30 @@ enum Operation {
     UNDEFINED, // for debug
 }
 
-fn decode_u_type(code_word: u32) -> DecodedInstruction {
+enum InstType {
+    R,
+    I,
+    S,
+    B,
+    U,
+    J,
+}
+
+fn opcode_to_insttype(opcode: u32) -> InstType {
+    match opcode {
+        0b0110111 | 0b0010111 => InstType::U, // LUI AUIPC
+        0b1101111 => InstType::J,             // JAL
+        0b1100111 | 0b0000011 | 0b0010011 | 0b0001111 | 0b1110011 => InstType::I, // JALR (LB LH LW LBU LHU) (ADDI SLTI SLTIU XORI ORI ANDI) (FENCE FENCE.I) (ECALL EBREAK CSRRW CSRRS CSRRC CSRRWI CSRRSI CSRRCI)
+        0b1100011 => InstType::B, // (BEQ, BNE, BLT, BGE, BLTU, BGEU)
+        0b0100011 => InstType::S, // (SB SH SW)
+        0b0110011 => InstType::R, // (ADD SUB SLL SLT SLTU XOR SRL SRA OR AND)
+        _ => panic!("invalid opcode!"),
+    }
+}
+
+fn decode_u_type(code_word: u32) -> OpInfo {
     let opcode = code_word & 0x7f;
-    return DecodedInstruction {
+    return OpInfo {
         operation: Operation::LUI,
         dstRegs: vec![1, 2],
         srcRegs: vec![1],
@@ -72,11 +93,11 @@ fn decode_u_type(code_word: u32) -> DecodedInstruction {
     };
 }
 
-fn decode(code_word: u32) -> DecodedInstruction {
+fn decode(code_word: u32) -> OpInfo {
     let opcode = code_word & 0x7f;
     return match opcode {
         0x38 => decode_u_type(code_word),
-        _ => DecodedInstruction {
+        _ => OpInfo {
             operation: Operation::UNDEFINED,
             dstRegs: vec![0],
             srcRegs: vec![0],
