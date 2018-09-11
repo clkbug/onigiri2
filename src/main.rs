@@ -5,8 +5,8 @@ struct ArchitectureState {
 
 struct OpInfo {
     operation: Operation,
-    dstRegs: Vec<i32>,
-    srcRegs: Vec<i32>,
+    dst_regs: Vec<i32>,
+    src_regs: Vec<i32>,
     imm: i32,
 }
 
@@ -106,8 +106,8 @@ fn decode_u_type(code_word: u32) -> OpInfo {
     };
     return OpInfo {
         operation: operation,
-        dstRegs: vec![rd as i32],
-        srcRegs: vec![],
+        dst_regs: vec![rd as i32],
+        src_regs: vec![],
         imm: imm as i32,
     };
 }
