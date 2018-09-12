@@ -1,3 +1,8 @@
+use std::env;
+use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
+
 fn extract_bits(val: u32, begin: i32, len: i32, sext: bool) -> u32 {
     let mask = if len >= 32 { 0 } else { !0 << len };
     let result = (val >> begin) & !mask;
@@ -18,9 +23,67 @@ fn extract_bits_test() {
     assert_eq!(extract_bits(15, 0, 4, false), 15);
 }
 
+struct Memory {
+    array: Vec<u32>,
+    size: usize,
+}
+
+impl Memory {
+    fn new(size: usize, stream: &mut BufRead) -> Memory {
+        let mut mem = Memory {
+            array: Vec::with_capacity(size),
+            size: size,
+        };
+
+        let mut buffer = String::new();
+        loop {
+            match stream.read_line(&mut buffer) {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    let x = u32::from_str_radix(&buffer.trim_right(), 16);
+                    match x {
+                        Ok(x) => {
+                            mem.array.push(x);
+                        }
+                        Err(e) => {
+                            eprintln!("{} is {}", buffer.trim_right(), e);
+                            panic!("read_memh error: failed to parse line");
+                        }
+                    }
+                    buffer.clear();
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    panic!("read_memh error: failed to read file");
+                }
+            }
+        }
+        return mem;
+    }
+
+    fn write(&mut self, addr: u32, value: u32, size: i32) {
+        match size {
+            1 | 2 => unimplemented!("MemWrite"),
+            4 => self.array[(addr >> 2) as usize] = value,
+            _ => panic!("invalid size"),
+        }
+    }
+
+    fn read(&self, addr: u32, size: i32) -> u32 {
+        match size {
+            1 | 2 => unimplemented!("MemRead"),
+            4 => self.array[(addr >> 2) as usize],
+            _ => panic!("invalid size Memory::read"),
+        }
+    }
+
+    fn read_memh(&mut self, stream: &mut BufRead) {}
+}
+
 struct ArchitectureState {
     pc: u32,
     regs: [u32; 32],
+    memory: Memory,
 }
 
 struct OpInfo {
@@ -161,11 +224,36 @@ fn decode(code_word: u32) -> OpInfo {
         _ => unimplemented!("decode"),
     }
 }
+
+fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {}
+
 fn main() {
-    let arch_state = ArchitectureState {
+    let argc = env::args().count();
+    if argc <= 2 {
+        eprintln!("too few arguments");
+        eprintln!("Usage: cargo run '.../code.hex' memsize");
+        std::process::exit(1);
+    }
+    let program: String = env::args().next().unwrap();
+    let args: Vec<String> = env::args().skip(1).collect();
+    let code = &args[0];
+    let size: usize = args[1].parse().unwrap();
+
+    let mut arch_state = ArchitectureState {
         pc: 0x8000,
         regs: [0; 32],
+        memory: match File::open(code) {
+            Ok(file) => {
+                let mut buf_file = BufReader::new(file);
+                Memory::new(size, &mut buf_file)
+            }
+            Err(e) => {
+                eprintln!("{}: {}", code, e);
+                panic!("initialize error")
+            }
+        },
     };
+    println!("{}", program);
+    println!("{:?}", args);
     println!("Hello, world! {}", arch_state.pc);
-    println!("{}", decode(0).imm);
 }
