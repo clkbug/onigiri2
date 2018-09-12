@@ -1,3 +1,23 @@
+fn extract_bits(val: u32, begin: i32, len: i32, sext: bool) -> u32 {
+    let mask = if len >= 32 { 0 } else { !0 << len };
+    let result = (val >> begin) & !mask;
+    if sext && ((result & (1 << (len - 1))) != 0) {
+        return result | mask;
+    } else {
+        return result;
+    }
+}
+
+#[test]
+fn extract_bits_test() {
+    assert_eq!(extract_bits(1, 0, 1, true), 0xffffffff);
+    assert_eq!(extract_bits(1, 0, 1, false), 1);
+    assert_eq!(extract_bits(8, 2, 3, false), 2);
+    assert_eq!(extract_bits(8, 2, 3, true), 2);
+    assert_eq!(extract_bits(15, 0, 4, true), 0xffffffff);
+    assert_eq!(extract_bits(15, 0, 4, false), 15);
+}
+
 struct ArchitectureState {
     pc: u32,
     regs: [u32; 32],
@@ -112,11 +132,31 @@ fn decode_u_type(code_word: u32) -> OpInfo {
     };
 }
 
+fn decode_j_type(code_word: u32) -> OpInfo {
+    let opcode = code_word & 0x7f;
+    assert!(
+        opcode == OPCODE_JAL,
+        "decode_j_type tries to decode not J codeword (opcode: {})",
+        opcode
+    );
+    let rd = (code_word >> 7) & 0x1f;
+    let imm = (extract_bits(code_word, 21, 10, false) << 0)
+        | (extract_bits(code_word, 20, 1, false) << 10)
+        | (extract_bits(code_word, 12, 8, false) << 11)
+        | (extract_bits(code_word, 31, 1, false) << 19);
+    return OpInfo {
+        operation: Operation::JAL,
+        dst_regs: vec![rd as i32],
+        src_regs: vec![],
+        imm: imm as i32,
+    };
+}
+
 fn decode(code_word: u32) -> OpInfo {
     let opcode = code_word & 0x7f;
     match opcode_to_insttype(opcode) {
         Some(InstType::U) => decode_u_type(code_word),
-
+        Some(InstType::J) => decode_j_type(code_word),
         None => panic!("invalid code_word"),
         _ => unimplemented!("decode"),
     }
