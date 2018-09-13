@@ -500,6 +500,64 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             let val = src0.wrapping_sub(src1);
             state.regwrite(opinfo.dst_regs[0], val);
         }
+        Operation::ANDI => {
+            let val = state.regread(opinfo.src_regs[0]) & opinfo.imm as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::ORI => {
+            let val = state.regread(opinfo.src_regs[0]) | opinfo.imm as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::XORI => {
+            let val = state.regread(opinfo.src_regs[0]) ^ opinfo.imm as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::AND => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = src0 & src1;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::OR => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = src0 & src1;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::XOR => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = src0 & src1;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SLTI => {
+            let val = if (state.regread(opinfo.src_regs[0]) as i32) < opinfo.imm {
+                1
+            } else {
+                0
+            };
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SLTIU => {
+            let val = if state.regread(opinfo.src_regs[0]) < opinfo.imm as u32 {
+                1
+            } else {
+                0
+            };
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SLT => {
+            let src0 = state.regread(opinfo.src_regs[0]) as i32;
+            let src1 = state.regread(opinfo.src_regs[1]) as i32;
+            let val = if src0 < src1 { 1 } else { 0 };
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SLTU => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = if src0 < src1 { 1 } else { 0 };
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
         Operation::SW | Operation::SH | Operation::SB => {
             let addr = state
                 .regread(opinfo.src_regs[0])
