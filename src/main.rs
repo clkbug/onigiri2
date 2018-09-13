@@ -495,26 +495,31 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             let val = src0.wrapping_sub(src1);
             state.regwrite(opinfo.dst_regs[0], val);
         }
-        Operation::SW => {
+        Operation::SW | Operation::SH | Operation::SB => {
             let addr = state
                 .regread(opinfo.src_regs[0])
                 .wrapping_add(opinfo.imm as u32);
-            let val = state.regread(opinfo.src_regs[1]);
-            state.memory.write(addr, val, 4);
+            let (mask, size) = match opinfo.operation {
+                Operation::SW => (0xffffffff, 4),
+                Operation::SH => (0xffff, 2),
+                Operation::SB => (0xff, 1),
+                _ => panic!("can't reach here"),
+            };
+            let val = state.regread(opinfo.src_regs[1]) & mask;
+            state.memory.write(addr, val, size);
         }
-        Operation::SH => {
+        Operation::LW | Operation::LH | Operation::LB => {
             let addr = state
                 .regread(opinfo.src_regs[0])
                 .wrapping_add(opinfo.imm as u32);
-            let val = state.regread(opinfo.src_regs[1]);
-            state.memory.write(addr, val, 2);
-        }
-        Operation::SB => {
-            let addr = state
-                .regread(opinfo.src_regs[0])
-                .wrapping_add(opinfo.imm as u32);
-            let val = state.regread(opinfo.src_regs[1]);
-            state.memory.write(addr, val, 1);
+            let size = match opinfo.operation {
+                Operation::LW => 4,
+                Operation::LH => 2,
+                Operation::LB => 1,
+                _ => panic!("can't reach here"),
+            };
+            let val = state.memory.read(addr, size);
+            state.regwrite(opinfo.dst_regs[0], val);
         }
         Operation::BEQ => {
             let src0 = state.regread(opinfo.src_regs[0]);
@@ -558,7 +563,37 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
                 npc = state.pc.wrapping_add(opinfo.imm as u32);
             }
         }
-        _ => unimplemented!("unimplemented operation"),
+        Operation::SLLI => {
+            let val = state.regread(opinfo.src_regs[0]) << opinfo.imm;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SRLI => {
+            let val = state.regread(opinfo.src_regs[0]) >> opinfo.imm;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SRAI => {
+            let val = (state.regread(opinfo.src_regs[0]) as i32) >> opinfo.imm;
+            state.regwrite(opinfo.dst_regs[0], val as u32);
+        }
+        Operation::SLL => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = src0 << src1;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SRL => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = src0 >> src1;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        Operation::SRA => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            let val = ((src0 as i32) >> src1) as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+        _ => unimplemented!("unimplemented operation: {:?}", opinfo),
     };
 
     state.pc = npc;
@@ -591,7 +626,7 @@ fn main() {
     };
     let mut i = 0;
     loop {
-        if i >= 100 {
+        if i >= 1000 {
             break;
         } else {
             i += 1;
