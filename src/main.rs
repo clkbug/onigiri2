@@ -389,7 +389,7 @@ fn decode_b_type(code_word: u32) -> OpInfo {
         | (extract_bits(code_word, 25, 6, false) << 4)
         | (extract_bits(code_word, 7, 1, false) << 10)
         | (extract_bits(code_word, 31, 1, false) << 11);
-    let imm = imm << 1;
+    let imm = extract_bits(imm, 0, 12, true) << 1;
 
     let operation = match funct {
         FUNCT_BEQ => Operation::BEQ,
@@ -457,7 +457,7 @@ fn decode(code_word: u32) -> OpInfo {
         Some(InstType::S) => decode_s_type(code_word),
         Some(InstType::R) => decode_r_type(code_word),
         Some(InstType::B) => decode_b_type(code_word),
-        None => panic!("invalid code_word"),
+        None => panic!("invalid code_word: code_word={:b}", code_word),
         _ => unimplemented!("decode"),
     }
 }
@@ -611,6 +611,7 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             if src0 < src1 {
                 npc = state.pc.wrapping_add(opinfo.imm as u32);
             }
+            println!("npc: {:x}", npc);
         }
         Operation::BGE => {
             let src0 = state.regread(opinfo.src_regs[0]) as i32;
