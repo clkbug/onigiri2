@@ -103,6 +103,7 @@ struct OpInfo {
     dst_regs: Vec<u32>,
     src_regs: Vec<u32>,
     imm: i32,
+    code_word: u32,
 }
 
 #[derive(Debug)]
@@ -229,6 +230,7 @@ fn decode_u_type(code_word: u32) -> OpInfo {
         dst_regs: vec![rd as u32],
         src_regs: vec![],
         imm: imm as i32,
+        code_word: code_word,
     };
 }
 
@@ -244,12 +246,13 @@ fn decode_j_type(code_word: u32) -> OpInfo {
         | (extract_bits(code_word, 20, 1, false) << 10)
         | (extract_bits(code_word, 12, 8, false) << 11)
         | (extract_bits(code_word, 31, 1, false) << 19);
-    let imm = extract_bits(imm, 0, 20, true);
+    let imm = extract_bits(imm, 0, 20, true) << 1;
     return OpInfo {
         operation: Operation::JAL,
         dst_regs: vec![rd as u32],
         src_regs: vec![],
         imm: imm as i32,
+        code_word: code_word,
     };
 }
 
@@ -260,7 +263,6 @@ fn decode_i_type(code_word: u32) -> OpInfo {
     let rs1 = extract_bits(code_word, 15, 5, false);
     let imm = extract_bits(code_word, 20, 12, true);
 
-    // (ECALL EBREAK CSRRW CSRRS CSRRC CSRRWI CSRRSI CSRRCI)
     let operation = match (opcode, funct) {
         (OPCODE_JALR, _) => Operation::JALR,
         (OPCODE_LOADS, FUNCT_LB) => Operation::LB,
@@ -290,6 +292,7 @@ fn decode_i_type(code_word: u32) -> OpInfo {
         _ => unimplemented!("hoge"),
     };
 
+    // Operationにあわせて符号拡張を行う
     let imm = match operation {
         Operation::SLTIU | Operation::XORI | Operation::ORI | Operation::ANDI => {
             extract_bits(imm, 0, 12, false)
@@ -302,6 +305,7 @@ fn decode_i_type(code_word: u32) -> OpInfo {
         dst_regs: vec![rd as u32],
         src_regs: vec![rs1 as u32],
         imm: imm as i32,
+        code_word: code_word,
     };
 }
 
@@ -322,17 +326,25 @@ fn fetch(state: &ArchitectureState) -> u32 {
 
 fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
     let mut npc = state.pc + 4;
-    println!("PC: {}", state.pc);
-    println!("{:?}", opinfo);
+    println!("PC: 0x{:x} {:?}", state.pc, opinfo);
 
     match opinfo.operation {
         Operation::JAL => {
             state.regwrite(opinfo.dst_regs[0], npc);
-            npc += opinfo.imm as u32;
+            npc = state.pc.wrapping_add(opinfo.imm as u32);
+        }
+        Operation::JALR => {
+            state.regwrite(opinfo.dst_regs[0], npc);
+            npc = state.regread(opinfo.src_regs[0].wrapping_add(opinfo.imm as u32));
         }
         Operation::LUI => {
             state.regwrite(opinfo.dst_regs[0], (opinfo.imm << 12) as u32);
         }
+        Operation::ADDI => {
+            let val = state.regread(opinfo.src_regs[0]) + opinfo.imm as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
+
         _ => unimplemented!("unimplemented operation"),
     };
 
@@ -364,7 +376,13 @@ fn main() {
             }
         },
     };
+    let mut i = 0;
     loop {
+        if i >= 100 {
+            break;
+        } else {
+            i += 1;
+        }
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
         execute(&mut arch_state, opinfo);
