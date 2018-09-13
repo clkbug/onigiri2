@@ -76,8 +76,6 @@ impl Memory {
             _ => panic!("invalid size Memory::read"),
         }
     }
-
-    fn read_memh(&mut self, stream: &mut BufRead) {}
 }
 
 struct ArchitectureState {
@@ -86,13 +84,28 @@ struct ArchitectureState {
     memory: Memory,
 }
 
+impl ArchitectureState {
+    fn regwrite(&mut self, addr: u32, val: u32) {
+        self.regs[addr as usize] = val;
+    }
+    fn regread(&self, addr: u32) -> u32 {
+        if addr == 0 {
+            0
+        } else {
+            self.regs[addr as usize]
+        }
+    }
+}
+
+#[derive(Debug)]
 struct OpInfo {
     operation: Operation,
-    dst_regs: Vec<i32>,
-    src_regs: Vec<i32>,
+    dst_regs: Vec<u32>,
+    src_regs: Vec<u32>,
     imm: i32,
 }
 
+#[derive(Debug)]
 enum Operation {
     LUI,
     AUIPC,
@@ -166,6 +179,30 @@ const OPCODE_BRANCH: u32 = 0b1100011;
 const OPCODE_STORES: u32 = 0b0100011;
 const OPCODE_REGS: u32 = 0b0110011;
 
+const FUNCT_LB: u32 = 0b000;
+const FUNCT_LH: u32 = 0b001;
+const FUNCT_LW: u32 = 0b010;
+const FUNCT_LBU: u32 = 0b100;
+const FUNCT_LHU: u32 = 0b101;
+
+const FUNCT_ADDI: u32 = 0b000;
+const FUNCT_SLTI: u32 = 0b010;
+const FUNCT_SLTIU: u32 = 0b011;
+const FUNCT_XORI: u32 = 0b100;
+const FUNCT_ORI: u32 = 0b110;
+const FUNCT_ANDI: u32 = 0b111;
+
+const FUNCT_FENCE: u32 = 0b000;
+const FUNCT_FENCEI: u32 = 0b001;
+
+const FUNCT_ECALL: u32 = 0b000;
+const FUNCT_CSRRW: u32 = 0b001;
+const FUNCT_CSRRS: u32 = 0b010;
+const FUNCT_CSRRC: u32 = 0b011;
+const FUNCT_CSRRWI: u32 = 0b101;
+const FUNCT_CSRRSI: u32 = 0b110;
+const FUNCT_CSRRCI: u32 = 0b111;
+
 fn opcode_to_insttype(opcode: u32) -> Option<InstType> {
     match opcode {
         OPCODE_LUI | OPCODE_AUIPC => Some(InstType::U), // LUI AUIPC
@@ -179,9 +216,9 @@ fn opcode_to_insttype(opcode: u32) -> Option<InstType> {
 }
 
 fn decode_u_type(code_word: u32) -> OpInfo {
-    let opcode = code_word & 0x7f;
-    let rd = (code_word >> 7) & 0x1f;
-    let imm = code_word >> 12;
+    let opcode = extract_bits(code_word, 0, 7, false);
+    let rd = extract_bits(code_word, 7, 5, false);
+    let imm = extract_bits(code_word, 12, 20, true);
     let operation = match opcode {
         OPCODE_LUI => Operation::LUI,
         OPCODE_AUIPC => Operation::AUIPC,
@@ -189,28 +226,81 @@ fn decode_u_type(code_word: u32) -> OpInfo {
     };
     return OpInfo {
         operation: operation,
-        dst_regs: vec![rd as i32],
+        dst_regs: vec![rd as u32],
         src_regs: vec![],
         imm: imm as i32,
     };
 }
 
 fn decode_j_type(code_word: u32) -> OpInfo {
-    let opcode = code_word & 0x7f;
+    let opcode = extract_bits(code_word, 0, 7, false);
     assert!(
         opcode == OPCODE_JAL,
         "decode_j_type tries to decode not J codeword (opcode: {})",
         opcode
     );
-    let rd = (code_word >> 7) & 0x1f;
+    let rd = extract_bits(code_word, 7, 5, false);
     let imm = (extract_bits(code_word, 21, 10, false) << 0)
         | (extract_bits(code_word, 20, 1, false) << 10)
         | (extract_bits(code_word, 12, 8, false) << 11)
         | (extract_bits(code_word, 31, 1, false) << 19);
+    let imm = extract_bits(imm, 0, 20, true);
     return OpInfo {
         operation: Operation::JAL,
-        dst_regs: vec![rd as i32],
+        dst_regs: vec![rd as u32],
         src_regs: vec![],
+        imm: imm as i32,
+    };
+}
+
+fn decode_i_type(code_word: u32) -> OpInfo {
+    let opcode = extract_bits(code_word, 0, 7, false);
+    let rd = extract_bits(code_word, 7, 5, false);
+    let funct = extract_bits(code_word, 12, 3, false);
+    let rs1 = extract_bits(code_word, 15, 5, false);
+    let imm = extract_bits(code_word, 20, 12, true);
+
+    // (ECALL EBREAK CSRRW CSRRS CSRRC CSRRWI CSRRSI CSRRCI)
+    let operation = match (opcode, funct) {
+        (OPCODE_JALR, _) => Operation::JALR,
+        (OPCODE_LOADS, FUNCT_LB) => Operation::LB,
+        (OPCODE_LOADS, FUNCT_LH) => Operation::LH,
+        (OPCODE_LOADS, FUNCT_LW) => Operation::LW,
+        (OPCODE_LOADS, FUNCT_LBU) => Operation::LBU,
+        (OPCODE_LOADS, FUNCT_LHU) => Operation::LHU,
+        (OPCODE_IMM, FUNCT_ADDI) => Operation::ADDI,
+        (OPCODE_IMM, FUNCT_SLTI) => Operation::SLTI,
+        (OPCODE_IMM, FUNCT_SLTIU) => Operation::SLTIU,
+        (OPCODE_IMM, FUNCT_XORI) => Operation::XORI,
+        (OPCODE_IMM, FUNCT_ORI) => Operation::ORI,
+        (OPCODE_IMM, FUNCT_ANDI) => Operation::ANDI,
+        (OPCODE_FENCE, FUNCT_FENCE) => Operation::FENCE,
+        (OPCODE_FENCE, FUNCT_FENCEI) => Operation::FENCEI,
+        (OPCODE_CTRL, FUNCT_ECALL) => match imm {
+            0 => Operation::ECALL,
+            1 => Operation::EBREAK,
+            _ => panic!("invalid ECALL/EBREAK imm!"),
+        },
+        (OPCODE_CTRL, FUNCT_CSRRW) => Operation::CSRRW,
+        (OPCODE_CTRL, FUNCT_CSRRS) => Operation::CSRRS,
+        (OPCODE_CTRL, FUNCT_CSRRC) => Operation::CSRRC,
+        (OPCODE_CTRL, FUNCT_CSRRWI) => Operation::CSRRWI,
+        (OPCODE_CTRL, FUNCT_CSRRSI) => Operation::CSRRSI,
+        (OPCODE_CTRL, FUNCT_CSRRCI) => Operation::CSRRCI,
+        _ => unimplemented!("hoge"),
+    };
+
+    let imm = match operation {
+        Operation::SLTIU | Operation::XORI | Operation::ORI | Operation::ANDI => {
+            extract_bits(imm, 0, 12, false)
+        }
+        _ => extract_bits(imm, 0, 12, true),
+    };
+
+    return OpInfo {
+        operation: operation,
+        dst_regs: vec![rd as u32],
+        src_regs: vec![rs1 as u32],
         imm: imm as i32,
     };
 }
@@ -220,12 +310,34 @@ fn decode(code_word: u32) -> OpInfo {
     match opcode_to_insttype(opcode) {
         Some(InstType::U) => decode_u_type(code_word),
         Some(InstType::J) => decode_j_type(code_word),
+        Some(InstType::I) => decode_i_type(code_word),
         None => panic!("invalid code_word"),
         _ => unimplemented!("decode"),
     }
 }
 
-fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {}
+fn fetch(state: &ArchitectureState) -> u32 {
+    state.memory.read(state.pc, 4)
+}
+
+fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
+    let mut npc = state.pc + 4;
+    println!("PC: {}", state.pc);
+    println!("{:?}", opinfo);
+
+    match opinfo.operation {
+        Operation::JAL => {
+            state.regwrite(opinfo.dst_regs[0], npc);
+            npc += opinfo.imm as u32;
+        }
+        Operation::LUI => {
+            state.regwrite(opinfo.dst_regs[0], (opinfo.imm << 12) as u32);
+        }
+        _ => unimplemented!("unimplemented operation"),
+    };
+
+    state.pc = npc;
+}
 
 fn main() {
     let argc = env::args().count();
@@ -234,7 +346,6 @@ fn main() {
         eprintln!("Usage: cargo run '.../code.hex' memsize");
         std::process::exit(1);
     }
-    let program: String = env::args().next().unwrap();
     let args: Vec<String> = env::args().skip(1).collect();
     let code = &args[0];
     let size: usize = args[1].parse().unwrap();
@@ -253,7 +364,9 @@ fn main() {
             }
         },
     };
-    println!("{}", program);
-    println!("{:?}", args);
-    println!("Hello, world! {}", arch_state.pc);
+    loop {
+        let code_word = fetch(&arch_state);
+        let opinfo = decode(code_word);
+        execute(&mut arch_state, opinfo);
+    }
 }
