@@ -68,11 +68,16 @@ impl Memory {
     }
 
     fn write(&mut self, addr: u32, value: u32, size: i32) {
-        match size {
-            1 | 2 => unimplemented!("MemWrite"),
-            4 => self.array[(addr >> 2) as usize] = value,
+        let index = (addr >> 2) as usize;
+        let pos = (addr % 4) * 8;
+        let mask = match size {
+            1 => !(0xff << pos),
+            2 => !(0xffff << pos),
+            4 => 0,
             _ => panic!("invalid size"),
-        }
+        };
+        let memv = self.array[index] & mask;
+        self.array[index] = memv | (value << pos);
     }
 
     fn read(&self, addr: u32, size: i32) -> u32 {
@@ -228,6 +233,13 @@ const FUNCT_XOR: u32 = 0b0000000_100;
 const FUNCT_OR: u32 = 0b0000000_110;
 const FUNCT_AND: u32 = 0b0000000_111;
 
+const FUNCT_BEQ: u32 = 0b000;
+const FUNCT_BNE: u32 = 0b001;
+const FUNCT_BLT: u32 = 0b100;
+const FUNCT_BGE: u32 = 0b101;
+const FUNCT_BLTU: u32 = 0b110;
+const FUNCT_BGEU: u32 = 0b111;
+
 fn opcode_to_insttype(opcode: u32) -> Option<InstType> {
     match opcode {
         OPCODE_LUI | OPCODE_AUIPC => Some(InstType::U), // LUI AUIPC
@@ -262,7 +274,7 @@ fn decode_j_type(code_word: u32) -> OpInfo {
     let opcode = extract_bits(code_word, 0, 7, false);
     assert!(
         opcode == OPCODE_JAL,
-        "decode_j_type tries to decode not J codeword (opcode: {})",
+        "decode_j_type tries to decode not J code_word (opcode: {})",
         opcode
     );
     let rd = extract_bits(code_word, 7, 5, false);
@@ -361,6 +373,38 @@ fn decode_s_type(code_word: u32) -> OpInfo {
     };
 }
 
+fn decode_b_type(code_word: u32) -> OpInfo {
+    let opcode = extract_bits(code_word, 0, 7, false);
+    assert_eq!(opcode, OPCODE_BRANCH);
+    let funct = extract_bits(code_word, 12, 3, false);
+    let rs1 = extract_bits(code_word, 15, 5, false);
+    let rs2 = extract_bits(code_word, 20, 5, false);
+
+    let imm = (extract_bits(code_word, 8, 4, false) << 0)
+        | (extract_bits(code_word, 25, 6, false) << 4)
+        | (extract_bits(code_word, 7, 1, false) << 10)
+        | (extract_bits(code_word, 31, 1, false) << 11);
+    let imm = imm << 1;
+
+    let operation = match funct {
+        FUNCT_BEQ => Operation::BEQ,
+        FUNCT_BNE => Operation::BNE,
+        FUNCT_BLT => Operation::BLT,
+        FUNCT_BGE => Operation::BGE,
+        FUNCT_BLTU => Operation::BLTU,
+        FUNCT_BGEU => Operation::BGEU,
+        _ => panic!("invalid B-Type funct!"),
+    };
+
+    return OpInfo {
+        operation: operation,
+        dst_regs: vec![],
+        src_regs: vec![rs1 as u32, rs2 as u32],
+        imm: imm as i32,
+        code_word: code_word,
+    };
+}
+
 fn decode_r_type(code_word: u32) -> OpInfo {
     let opcode = extract_bits(code_word, 0, 7, false);
     assert_eq!(opcode, OPCODE_REGS);
@@ -381,7 +425,7 @@ fn decode_r_type(code_word: u32) -> OpInfo {
         FUNCT_XOR => Operation::XOR,
         FUNCT_OR => Operation::OR,
         FUNCT_AND => Operation::AND,
-        _ => panic!("invalid S-Type funct!"),
+        _ => panic!("invalid R-Type funct!"),
     };
 
     let mut opinfo = OpInfo {
@@ -407,6 +451,7 @@ fn decode(code_word: u32) -> OpInfo {
         Some(InstType::I) => decode_i_type(code_word),
         Some(InstType::S) => decode_s_type(code_word),
         Some(InstType::R) => decode_r_type(code_word),
+        Some(InstType::B) => decode_b_type(code_word),
         None => panic!("invalid code_word"),
         _ => unimplemented!("decode"),
     }
@@ -456,6 +501,62 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
                 .wrapping_add(opinfo.imm as u32);
             let val = state.regread(opinfo.src_regs[1]);
             state.memory.write(addr, val, 4);
+        }
+        Operation::SH => {
+            let addr = state
+                .regread(opinfo.src_regs[0])
+                .wrapping_add(opinfo.imm as u32);
+            let val = state.regread(opinfo.src_regs[1]);
+            state.memory.write(addr, val, 2);
+        }
+        Operation::SB => {
+            let addr = state
+                .regread(opinfo.src_regs[0])
+                .wrapping_add(opinfo.imm as u32);
+            let val = state.regread(opinfo.src_regs[1]);
+            state.memory.write(addr, val, 1);
+        }
+        Operation::BEQ => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            if src0 == src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
+        }
+        Operation::BNE => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            if src0 != src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
+        }
+        Operation::BLT => {
+            let src0 = state.regread(opinfo.src_regs[0]) as i32;
+            let src1 = state.regread(opinfo.src_regs[1]) as i32;
+            if src0 < src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
+        }
+        Operation::BLTU => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            if src0 < src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
+        }
+        Operation::BGE => {
+            let src0 = state.regread(opinfo.src_regs[0]) as i32;
+            let src1 = state.regread(opinfo.src_regs[1]) as i32;
+            if src0 >= src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
+        }
+        Operation::BGEU => {
+            let src0 = state.regread(opinfo.src_regs[0]);
+            let src1 = state.regread(opinfo.src_regs[1]);
+            if src0 >= src1 {
+                npc = state.pc.wrapping_add(opinfo.imm as u32);
+            }
         }
         _ => unimplemented!("unimplemented operation"),
     };
