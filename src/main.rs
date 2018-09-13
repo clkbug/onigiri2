@@ -73,7 +73,7 @@ impl Memory {
         let mask = match size {
             1 => !(0xff << pos),
             2 => !(0xffff << pos),
-            4 => 0,
+            4 => !0,
             _ => panic!("invalid size"),
         };
         let memv = self.array[index] & mask;
@@ -81,11 +81,16 @@ impl Memory {
     }
 
     fn read(&self, addr: u32, size: i32) -> u32 {
-        match size {
-            1 | 2 => unimplemented!("MemRead"),
-            4 => self.array[(addr >> 2) as usize],
-            _ => panic!("invalid size Memory::read"),
-        }
+        let index = (addr >> 2) as usize;
+        let pos = (addr % 4) * 8;
+        let mask = match size {
+            1 => !(0xff << pos),
+            2 => !(0xffff << pos),
+            4 => !0,
+            _ => panic!("invalid size"),
+        };
+        let memv = self.array[index] & mask;
+        return memv;
     }
 }
 
