@@ -521,13 +521,13 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
         Operation::OR => {
             let src0 = state.regread(opinfo.src_regs[0]);
             let src1 = state.regread(opinfo.src_regs[1]);
-            let val = src0 & src1;
+            let val = src0 | src1;
             state.regwrite(opinfo.dst_regs[0], val);
         }
         Operation::XOR => {
             let src0 = state.regread(opinfo.src_regs[0]);
             let src1 = state.regread(opinfo.src_regs[1]);
-            let val = src0 & src1;
+            let val = src0 ^ src1;
             state.regwrite(opinfo.dst_regs[0], val);
         }
         Operation::SLTI => {
@@ -698,5 +698,13 @@ fn main() {
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
         execute(&mut arch_state, opinfo);
+        println!(
+            "a0={},a1={}, a4={}, a7={}, t1={}",
+            arch_state.regread(10),
+            arch_state.regread(11),
+            arch_state.regread(14),
+            arch_state.regread(17),
+            arch_state.regread(6),
+        );
     }
 }
