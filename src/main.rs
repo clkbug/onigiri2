@@ -343,6 +343,7 @@ fn decode_i_type(code_word: u32) -> OpInfo {
         Operation::SLTIU | Operation::XORI | Operation::ORI | Operation::ANDI => {
             extract_bits(imm, 0, 12, false)
         }
+        Operation::SLLI | Operation::SRLI | Operation::SRAI => extract_bits(imm, 0, 5, false),
         _ => extract_bits(imm, 0, 12, true),
     };
 
@@ -673,6 +674,7 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let code = &args[0];
     let size: usize = args[1].parse().unwrap();
+    let maxinsns: u32 = args[2].parse().unwrap();
 
     let mut arch_state = ArchitectureState {
         pc: 0x8000,
@@ -689,12 +691,8 @@ fn main() {
         },
     };
     let mut i = 0;
-    loop {
-        if i >= 1000 {
-            break;
-        } else {
-            i += 1;
-        }
+    while i <= maxinsns {
+        i += 1;
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
         execute(&mut arch_state, opinfo);
