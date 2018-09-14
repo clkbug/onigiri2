@@ -572,14 +572,16 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             let val = state.regread(opinfo.src_regs[1]) & mask;
             state.memory.write(addr, val, size);
         }
-        Operation::LW | Operation::LH | Operation::LB => {
+        Operation::LW | Operation::LH | Operation::LB | Operation::LHU | Operation::LBU => {
             let addr = state
                 .regread(opinfo.src_regs[0])
                 .wrapping_add(opinfo.imm as u32);
-            let size = match opinfo.operation {
-                Operation::LW => 4,
-                Operation::LH => 2,
-                Operation::LB => 1,
+            let (size, sext) = match opinfo.operation {
+                Operation::LW => (4, false),
+                Operation::LH => (2, true),
+                Operation::LHU => (2, false),
+                Operation::LB => (1, true),
+                Operation::LBU => (1, false),
                 _ => panic!("can't reach here"),
             };
             let val = state.memory.read(addr, size);
