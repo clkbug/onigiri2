@@ -102,12 +102,14 @@ struct ArchitectureState {
 
 impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
+        println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
         self.regs[addr as usize] = val;
     }
     fn regread(&self, addr: u32) -> u32 {
         if addr == 0 {
             0
         } else {
+            println!("reg[{}]: {}", addr, self.regs[addr as usize]);
             self.regs[addr as usize]
         }
     }
@@ -434,19 +436,13 @@ fn decode_r_type(code_word: u32) -> OpInfo {
         _ => panic!("invalid R-Type funct!"),
     };
 
-    let mut opinfo = OpInfo {
+    return OpInfo {
         operation: operation,
         dst_regs: vec![rd as u32],
-        src_regs: vec![rs1 as u32],
+        src_regs: vec![rs1 as u32, rs2 as u32],
         imm: 0,
         code_word: code_word,
     };
-
-    match opinfo.operation {
-        Operation::SLL | Operation::SRL | Operation::SRA => opinfo.imm = rs2 as i32,
-        _ => opinfo.src_regs.push(rs2),
-    };
-    return opinfo;
 }
 
 fn decode(code_word: u32) -> OpInfo {
@@ -694,17 +690,10 @@ fn main() {
     };
     let mut i = 0;
     while i <= maxinsns {
+        println!("\n{}:", i);
         i += 1;
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
         execute(&mut arch_state, opinfo);
-        println!(
-            "a0={},a1={}, a4={}, a7={}, t1={}",
-            arch_state.regread(10),
-            arch_state.regread(11),
-            arch_state.regread(14),
-            arch_state.regread(17),
-            arch_state.regread(6),
-        );
     }
 }
