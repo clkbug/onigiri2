@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::File;
 use std::io::BufRead;
@@ -102,14 +103,14 @@ struct ArchitectureState {
 
 impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
-        println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
+        //println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
         self.regs[addr as usize] = val;
     }
     fn regread(&self, addr: u32) -> u32 {
         if addr == 0 {
             0
         } else {
-            println!("reg[{}]: {}", addr, self.regs[addr as usize]);
+            //println!("reg[{}]: {}", addr, self.regs[addr as usize]);
             self.regs[addr as usize]
         }
     }
@@ -465,7 +466,6 @@ fn fetch(state: &ArchitectureState) -> u32 {
 
 fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
     let mut npc = state.pc + 4;
-    println!("PC: 0x{:x} {:?}", state.pc, opinfo);
 
     match opinfo.operation {
         Operation::JAL => {
@@ -689,11 +689,22 @@ fn main() {
         },
     };
     let mut i = 0;
+    let mut pc_stats: HashMap<u32, u32> = HashMap::new();
     while i <= maxinsns {
-        println!("\n{}:", i);
+        //println!("\n{}:", i);
+        let c = 1 + match pc_stats.get(&arch_state.pc) {
+            Some(x) => *x,
+            None => 0,
+        };
+        pc_stats.insert(arch_state.pc, c);
         i += 1;
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
+        //println!("PC: 0x{:x} {:?}", state.pc, opinfo);
         execute(&mut arch_state, opinfo);
+    }
+
+    for (pc, counter) in &pc_stats {
+        println!("0x{:x}\t{}", pc, counter);
     }
 }
