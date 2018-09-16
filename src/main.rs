@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
+static mut debug_print: bool = false;
+
 fn extract_bits(val: u32, begin: i32, len: i32, sext: bool) -> u32 {
     let mask = if len >= 32 { 0 } else { !0 << len };
     let result = (val >> begin) & !mask;
@@ -103,14 +105,22 @@ struct ArchitectureState {
 
 impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
-        //println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
+        unsafe {
+            if debug_print && addr != 0 {
+                println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
+            }
+        }
         self.regs[addr as usize] = val;
     }
     fn regread(&self, addr: u32) -> u32 {
         if addr == 0 {
             0
         } else {
-            //println!("reg[{}]: {}", addr, self.regs[addr as usize]);
+            unsafe {
+                if debug_print {
+                    println!("reg[{}]: {}", addr, self.regs[addr as usize]);
+                }
+            }
             self.regs[addr as usize]
         }
     }
@@ -446,17 +456,25 @@ fn decode_r_type(code_word: u32) -> OpInfo {
     };
 }
 
-fn decode(code_word: u32) -> OpInfo {
+fn decode(code_word: u32) -> Option<OpInfo> {
     let opcode = code_word & 0x7f;
+    if opcode == 0 {
+        return Some(OpInfo {
+            operation: Operation::NOP,
+            dst_regs: vec![],
+            src_regs: vec![],
+            imm: 0,
+            code_word: code_word,
+        });
+    }
     match opcode_to_insttype(opcode) {
-        Some(InstType::U) => decode_u_type(code_word),
-        Some(InstType::J) => decode_j_type(code_word),
-        Some(InstType::I) => decode_i_type(code_word),
-        Some(InstType::S) => decode_s_type(code_word),
-        Some(InstType::R) => decode_r_type(code_word),
-        Some(InstType::B) => decode_b_type(code_word),
-        None => panic!("invalid code_word: code_word={:b}", code_word),
-        _ => unimplemented!("decode"),
+        Some(InstType::U) => Some(decode_u_type(code_word)),
+        Some(InstType::J) => Some(decode_j_type(code_word)),
+        Some(InstType::I) => Some(decode_i_type(code_word)),
+        Some(InstType::S) => Some(decode_s_type(code_word)),
+        Some(InstType::R) => Some(decode_r_type(code_word)),
+        Some(InstType::B) => Some(decode_b_type(code_word)),
+        None => None,
     }
 }
 
@@ -468,6 +486,7 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
     let mut npc = state.pc + 4;
 
     match opinfo.operation {
+        Operation::NOP => {}
         Operation::JAL => {
             state.regwrite(opinfo.dst_regs[0], npc);
             npc = state.pc.wrapping_add(opinfo.imm as u32);
@@ -581,6 +600,7 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
                 _ => panic!("can't reach here"),
             };
             let val = state.memory.read(addr, size);
+            let val = extract_bits(val, 0, 8 * size, sext);
             state.regwrite(opinfo.dst_regs[0], val);
         }
         Operation::BEQ => {
@@ -610,7 +630,6 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             if src0 < src1 {
                 npc = state.pc.wrapping_add(opinfo.imm as u32);
             }
-            println!("npc: {:x}", npc);
         }
         Operation::BGE => {
             let src0 = state.regread(opinfo.src_regs[0]) as i32;
@@ -656,6 +675,7 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             let val = ((src0 as i32) >> src1) as u32;
             state.regwrite(opinfo.dst_regs[0], val);
         }
+        Operation::EBREAK => {} // treat as NOP
         _ => unimplemented!("unimplemented operation: {:?}", opinfo),
     };
 
@@ -691,7 +711,6 @@ fn main() {
     let mut i = 0;
     let mut pc_stats: HashMap<u32, u32> = HashMap::new();
     while i <= maxinsns {
-        //println!("\n{}:", i);
         let c = 1 + match pc_stats.get(&arch_state.pc) {
             Some(x) => *x,
             None => 0,
@@ -700,8 +719,29 @@ fn main() {
         i += 1;
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
-        //println!("PC: 0x{:x} {:?}", state.pc, opinfo);
-        execute(&mut arch_state, opinfo);
+        unsafe {
+            if debug_print {
+                println!("\n{}:", i);
+                println!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
+            }
+        }
+        match opinfo {
+            Some(opinfo) => execute(&mut arch_state, opinfo),
+            None => {
+                eprintln!(
+                    "invalid code_word (PC: {:x}): {:b}",
+                    arch_state.pc, code_word
+                );
+                panic!("invalid code_word");
+            }
+        };
+
+        if true {
+            //i >= maxinsns * 9 / 10 {
+            unsafe {
+                debug_print = true;
+            }
+        }
     }
 
     for (pc, counter) in &pc_stats {
