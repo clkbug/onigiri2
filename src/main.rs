@@ -76,7 +76,7 @@ impl Memory {
         let mask = match size {
             1 => !(0xff << pos),
             2 => !(0xffff << pos),
-            4 => !0,
+            4 => 0,
             _ => panic!("invalid size"),
         };
         let memv = self.array[index] & mask;
@@ -87,12 +87,12 @@ impl Memory {
         let index = (addr >> 2) as usize;
         let pos = (addr % 4) * 8;
         let mask = match size {
-            1 => !(0xff << pos),
-            2 => !(0xffff << pos),
-            4 => !0,
+            1 => 0xff << pos,
+            2 => 0xffff << pos,
+            4 => 0xffffffff,
             _ => panic!("invalid size"),
         };
-        let memv = self.array[index] & mask;
+        let memv = (self.array[index] & mask) >> pos;
         return memv;
     }
 }
