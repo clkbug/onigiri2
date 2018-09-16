@@ -711,6 +711,7 @@ fn main() {
     let mut i = 0;
     let mut pc_stats: HashMap<u32, u32> = HashMap::new();
     while i <= maxinsns {
+        let old_pc = arch_state.pc;
         let c = 1 + match pc_stats.get(&arch_state.pc) {
             Some(x) => *x,
             None => 0,
@@ -741,6 +742,10 @@ fn main() {
             unsafe {
                 debug_print = true;
             }
+        }
+
+        if arch_state.pc == old_pc {
+            break;
         }
     }
 
