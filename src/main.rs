@@ -351,14 +351,7 @@ fn decode_i_type(code_word: u32) -> OpInfo {
         _ => unimplemented!("hoge"),
     };
 
-    // Operationにあわせて符号拡張を行う
-    let imm = match operation {
-        Operation::SLTIU | Operation::XORI | Operation::ORI | Operation::ANDI => {
-            extract_bits(imm, 0, 12, false)
-        }
-        Operation::SLLI | Operation::SRLI | Operation::SRAI => extract_bits(imm, 0, 5, false),
-        _ => extract_bits(imm, 0, 12, true),
-    };
+    let imm = extract_bits(imm, 0, 12, true);
 
     return OpInfo {
         operation: operation,
