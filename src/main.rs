@@ -71,6 +71,11 @@ impl Memory {
     }
 
     fn write(&mut self, addr: u32, value: u32, size: i32) {
+        if addr == 0xf6ff_f070 {
+            println!("{}", (value & 0xff) as u8 as char);
+            return;
+        }
+
         let index = (addr >> 2) as usize;
         let pos = (addr % 4) * 8;
         let mask = match size {
@@ -669,6 +674,10 @@ fn execute(state: &mut ArchitectureState, opinfo: OpInfo) {
             state.regwrite(opinfo.dst_regs[0], val);
         }
         Operation::EBREAK => {} // treat as NOP
+        Operation::AUIPC => {
+            let val = state.pc + (opinfo.imm << 12) as u32;
+            state.regwrite(opinfo.dst_regs[0], val);
+        }
         _ => unimplemented!("unimplemented operation: {:?}", opinfo),
     };
 
@@ -744,5 +753,9 @@ fn main() {
 
     for (pc, counter) in &pc_stats {
         println!("0x{:x}\t{}", pc, counter);
+    }
+
+    for i in 0..32 {
+        println!("r{}:\t{:x}", i, arch_state.regs[i]);
     }
 }
