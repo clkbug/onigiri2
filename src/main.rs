@@ -72,7 +72,7 @@ impl Memory {
 
     fn write(&mut self, addr: u32, value: u32, size: i32) {
         if addr == 0xf6ff_f070 {
-            println!("{}", (value & 0xff) as u8 as char);
+            eprintln!("{}", (value & 0xff) as u8 as char);
             return;
         }
 
@@ -112,7 +112,7 @@ impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
         unsafe {
             if debug_print && addr != 0 {
-                println!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
+                eprintln!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
             }
         }
         self.regs[addr as usize] = val;
@@ -123,7 +123,7 @@ impl ArchitectureState {
         } else {
             unsafe {
                 if debug_print {
-                    println!("reg[{}]: {}", addr, self.regs[addr as usize]);
+                    eprintln!("reg[{}]: {}", addr, self.regs[addr as usize]);
                 }
             }
             self.regs[addr as usize]
@@ -724,8 +724,8 @@ fn main() {
         let opinfo = decode(code_word);
         unsafe {
             if debug_print {
-                println!("\n{}:", i);
-                println!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
+                eprintln!("\n{}:", i);
+                eprintln!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
             }
         }
         match opinfo {
@@ -752,10 +752,10 @@ fn main() {
     }
 
     for (pc, counter) in &pc_stats {
-        println!("0x{:x}\t{}", pc, counter);
+        eprintln!("0x{:x}\t{}", pc, counter);
     }
 
     for i in 0..32 {
-        println!("r{}:\t{:x}", i, arch_state.regs[i]);
+        eprintln!("r{}:\t{:x}", i, arch_state.regs[i]);
     }
 }
