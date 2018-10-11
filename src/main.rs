@@ -5,6 +5,8 @@ use std::io::BufRead;
 use std::io::BufReader;
 
 static mut debug_print: bool = false;
+static mut time: u32 = 0;
+const freq: u32 = 1000_000_000;
 
 fn extract_bits(val: u32, begin: i32, len: i32, sext: bool) -> u32 {
     let mask = if len >= 32 { 0 } else { !0 << len };
@@ -72,7 +74,7 @@ impl Memory {
 
     fn write(&mut self, addr: u32, value: u32, size: i32) {
         if addr == 0xf6ff_f070 {
-            eprintln!("{}", (value & 0xff) as u8 as char);
+            print!("{}", (value & 0xff) as u8 as char);
             return;
         }
 
@@ -89,6 +91,12 @@ impl Memory {
     }
 
     fn read(&self, addr: u32, size: i32) -> u32 {
+        if addr == 0xffffff00 {
+            unsafe {
+                return time;
+            }
+        }
+
         let index = (addr >> 2) as usize;
         let pos = (addr % 4) * 8;
         let mask = match size {
@@ -140,7 +148,7 @@ struct OpInfo {
     code_word: u32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 enum Operation {
     LUI,
     AUIPC,
@@ -356,7 +364,11 @@ fn decode_i_type(code_word: u32) -> OpInfo {
         _ => unimplemented!("hoge"),
     };
 
-    let imm = extract_bits(imm, 0, 12, true);
+    let imm = if operation == Operation::SRAI {
+        extract_bits(imm, 0, 12, true) & 0x1f
+    } else {
+        extract_bits(imm, 0, 12, true)
+    };
 
     return OpInfo {
         operation: operation,
@@ -738,7 +750,9 @@ fn main() {
                 panic!("invalid code_word");
             }
         };
-
+        unsafe {
+            time += 1000;
+        }
         if true {
             //i >= maxinsns * 9 / 10 {
             unsafe {
