@@ -120,7 +120,7 @@ impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
         unsafe {
             if debug_print && addr != 0 {
-                eprintln!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
+                //eprintln!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
             }
         }
         self.regs[addr as usize] = val;
@@ -131,7 +131,7 @@ impl ArchitectureState {
         } else {
             unsafe {
                 if debug_print {
-                    eprintln!("reg[{}]: {}", addr, self.regs[addr as usize]);
+                    //eprintln!("reg[{}]: {}", addr, self.regs[addr as usize]);
                 }
             }
             self.regs[addr as usize]
@@ -736,12 +736,19 @@ fn main() {
         let opinfo = decode(code_word);
         unsafe {
             if debug_print {
-                eprintln!("\n{}:", i);
-                eprintln!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
+                //eprintln!("\n{}:", i);
+                //eprintln!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
             }
         }
         match opinfo {
-            Some(opinfo) => execute(&mut arch_state, opinfo),
+            Some(opinfo) => {
+                unsafe{
+                    if debug_print{
+                                eprintln!("{:08x} 32'h{:08x} {:?} {:?} {:?} {}", arch_state.pc, opinfo.code_word, opinfo.operation, opinfo.src_regs, opinfo.dst_regs, opinfo.imm);
+                    }
+                }
+                execute(&mut arch_state, opinfo)
+                },
             None => {
                 eprintln!(
                     "invalid code_word (PC: {:x}): {:b}",
@@ -766,7 +773,7 @@ fn main() {
     }
 
     for (pc, counter) in &pc_stats {
-        eprintln!("0x{:x}\t{}", pc, counter);
+        //eprintln!("0x{:x}\t{}", pc, counter);
     }
 
     for i in 0..32 {
