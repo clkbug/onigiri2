@@ -4,9 +4,8 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 
-static mut debug_print: bool = false;
-static mut time: u32 = 0;
-const freq: u32 = 1000_000_000;
+static mut DEBUG_PRINT: bool = false;
+static mut TIME: u32 = 0;
 
 fn extract_bits(val: u32, begin: i32, len: i32, sext: bool) -> u32 {
     let mask = if len >= 32 { 0 } else { !0 << len };
@@ -30,14 +29,12 @@ fn extract_bits_test() {
 
 struct Memory {
     array: Vec<u32>,
-    size: usize,
 }
 
 impl Memory {
-    fn new(size: usize, stream: &mut BufRead) -> Memory {
+    fn new(size: usize, stream: &mut dyn BufRead) -> Memory {
         let mut mem = Memory {
             array: Vec::with_capacity(size),
-            size: size,
         };
 
         let mut buffer = String::new();
@@ -46,14 +43,14 @@ impl Memory {
             match stream.read_line(&mut buffer) {
                 Ok(0) => break, // EOF
                 Ok(_) => {
-                    let x = u32::from_str_radix(&buffer.trim_right(), 16);
+                    let x = u32::from_str_radix(&buffer.trim_end(), 16);
                     match x {
                         Ok(x) => {
                             mem.array.push(x);
                             count += 4;
                         }
                         Err(e) => {
-                            eprintln!("{} is {}", buffer.trim_right(), e);
+                            eprintln!("{} is {}", buffer.trim_end(), e);
                             panic!("read_memh error: failed to parse line");
                         }
                     }
@@ -93,7 +90,7 @@ impl Memory {
     fn read(&self, addr: u32, size: i32) -> u32 {
         if addr == 0xffffff00 {
             unsafe {
-                return time;
+                return TIME;
             }
         }
 
@@ -119,7 +116,7 @@ struct ArchitectureState {
 impl ArchitectureState {
     fn regwrite(&mut self, addr: u32, val: u32) {
         unsafe {
-            if debug_print && addr != 0 {
+            if DEBUG_PRINT && addr != 0 {
                 //eprintln!("reg[{}]: {} -> {}", addr, self.regs[addr as usize], val);
             }
         }
@@ -130,7 +127,7 @@ impl ArchitectureState {
             0
         } else {
             unsafe {
-                if debug_print {
+                if DEBUG_PRINT {
                     //eprintln!("reg[{}]: {}", addr, self.regs[addr as usize]);
                 }
             }
@@ -735,20 +732,28 @@ fn main() {
         let code_word = fetch(&arch_state);
         let opinfo = decode(code_word);
         unsafe {
-            if debug_print {
+            if DEBUG_PRINT {
                 //eprintln!("\n{}:", i);
                 //eprintln!("PC: 0x{:x} {:?}", arch_state.pc, opinfo);
             }
         }
         match opinfo {
             Some(opinfo) => {
-                unsafe{
-                    if debug_print{
-                                eprintln!("{:08x} 32'h{:08x} {:?} {:?} {:?} {}", arch_state.pc, opinfo.code_word, opinfo.operation, opinfo.src_regs, opinfo.dst_regs, opinfo.imm);
+                unsafe {
+                    if DEBUG_PRINT {
+                        eprintln!(
+                            "{:08x} 32'h{:08x} {:?} {:?} {:?} {}",
+                            arch_state.pc,
+                            opinfo.code_word,
+                            opinfo.operation,
+                            opinfo.src_regs,
+                            opinfo.dst_regs,
+                            opinfo.imm
+                        );
                     }
                 }
                 execute(&mut arch_state, opinfo)
-                },
+            }
             None => {
                 eprintln!(
                     "invalid code_word (PC: {:x}): {:b}",
@@ -758,12 +763,12 @@ fn main() {
             }
         };
         unsafe {
-            time += 1000;
+            TIME += 1000;
         }
         if true {
             //i >= maxinsns * 9 / 10 {
             unsafe {
-                debug_print = true;
+                DEBUG_PRINT = true;
             }
         }
 
@@ -772,8 +777,12 @@ fn main() {
         }
     }
 
-    for (pc, counter) in &pc_stats {
-        //eprintln!("0x{:x}\t{}", pc, counter);
+    unsafe {
+        if DEBUG_PRINT {
+            for (pc, counter) in &pc_stats {
+                eprintln!("0x{:x}\t{}", pc, counter);
+            }
+        }
     }
 
     for i in 0..32 {
