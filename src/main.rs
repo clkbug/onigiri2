@@ -697,7 +697,7 @@ fn main() {
     let argc = env::args().count();
     if argc <= 2 {
         eprintln!("too few arguments");
-        eprintln!("Usage: cargo run '.../code.hex' memsize");
+        eprintln!("Usage: cargo run '.../code.hex' memsize maxinsns");
         std::process::exit(1);
     }
     let args: Vec<String> = env::args().skip(1).collect();
@@ -706,7 +706,7 @@ fn main() {
     let maxinsns: u32 = args[2].parse().unwrap();
 
     let mut arch_state = ArchitectureState {
-        pc: 0x8000,
+        pc: 0x1000,
         regs: [0; 32],
         memory: match File::open(code) {
             Ok(file) => {
@@ -777,13 +777,13 @@ fn main() {
         }
     }
 
-    unsafe {
-        if DEBUG_PRINT {
-            for (pc, counter) in &pc_stats {
-                eprintln!("0x{:x}\t{}", pc, counter);
-            }
-        }
-    }
+    // unsafe {
+    //     if DEBUG_PRINT {
+    //         for (pc, counter) in &pc_stats {
+    //             eprintln!("0x{:x}\t{}", pc, counter);
+    //         }
+    //     }
+    // }
 
     for i in 0..32 {
         eprintln!("r{}:\t{:x}", i, arch_state.regs[i]);
